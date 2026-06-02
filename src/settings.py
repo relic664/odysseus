@@ -80,6 +80,8 @@ DEFAULT_SETTINGS = {
     "google_pse_cx": "",
     "tavily_api_key": "",
     "serper_api_key": "",
+    "fetch_provider": "simple",
+    "fetch_fallback_chain": [],
     "research_endpoint_id": "",
     "research_model": "",
     "research_search_provider": "",

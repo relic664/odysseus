@@ -10,6 +10,10 @@ from .content import fetch_webpage_content
 
 logger = logging.getLogger(__name__)
 
+FETCH_PROVIDER_INFO = {
+    "simple": ("Simple (HTTP + BS4)", False, False),
+}
+
 
 @dataclass
 class FetchResult:
