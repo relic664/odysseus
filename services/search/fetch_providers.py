@@ -156,6 +156,16 @@ class Crawl4aiFetchProvider(FetchProvider):
 
             data = resp.json()
 
+            if isinstance(data, dict) and not data.get("success", True):
+                err = data.get("error_message") or data.get("error") or "Crawl4ai reported failure"
+                return FetchResult(
+                    url=url,
+                    title="",
+                    content="",
+                    success=False,
+                    error=f"Crawl4ai: {err}",
+                )
+
             results = self._decode_results(data)
             if not results:
                 return FetchResult(
@@ -167,6 +177,17 @@ class Crawl4aiFetchProvider(FetchProvider):
                 )
 
             result = results[0]
+
+            if not result.get("success", True):
+                err = result.get("error_message") or result.get("error") or "Crawl4ai reported failure"
+                return FetchResult(
+                    url=url,
+                    title="",
+                    content="",
+                    success=False,
+                    error=f"Crawl4ai: {err}",
+                )
+
             return FetchResult(
                 url=url,
                 title=self._extract_title(result),
