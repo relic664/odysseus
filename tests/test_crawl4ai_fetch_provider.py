@@ -1,141 +1,9 @@
-"""Unit tests for Crawl4aiFetchProvider."""
-import asyncio
+"""Unit tests for Crawl4aiFetchProvider (/crawl endpoint)."""
 from unittest.mock import MagicMock, patch
-
 
 import pytest
 
 from services.search.fetch_providers import Crawl4aiFetchProvider, FetchResult
-
-
-# ── _extract_markdown ──────────────────────────────────────────────
-
-def test_extract_markdown_fit_priority():
-    data = {"fit_markdown": "# Fit", "raw_markdown": "# Raw", "markdown": "# Plain"}
-    assert Crawl4aiFetchProvider._extract_markdown(data) == "# Fit"
-
-
-def test_extract_markdown_filtered_fallback():
-    data = {"filtered_markdown": "# Filtered", "raw_markdown": "# Raw"}
-    assert Crawl4aiFetchProvider._extract_markdown(data) == "# Filtered"
-
-
-def test_extract_markdown_plain_fallback():
-    data = {"markdown": "# Plain"}
-    assert Crawl4aiFetchProvider._extract_markdown(data) == "# Plain"
-
-
-def test_extract_markdown_raw_fallback():
-    data = {"raw_markdown": "# Raw"}
-    assert Crawl4aiFetchProvider._extract_markdown(data) == "# Raw"
-
-
-def test_extract_markdown_content_fallback():
-    data = {"content": "body text"}
-    assert Crawl4aiFetchProvider._extract_markdown(data) == "body text"
-
-
-def test_extract_markdown_nested_dict():
-    data = {"markdown": {"fit_markdown": "# Nested fit"}}
-    assert Crawl4aiFetchProvider._extract_markdown(data) == "# Nested fit"
-
-
-def test_extract_markdown_empty_string_returns_empty():
-    data = {"fit_markdown": "", "raw_markdown": "  "}
-    assert Crawl4aiFetchProvider._extract_markdown(data) == ""
-
-
-def test_extract_markdown_non_string_returns_empty():
-    data = {"fit_markdown": 123, "markdown": None}
-    assert Crawl4aiFetchProvider._extract_markdown(data) == ""
-
-
-# ── _extract_title ─────────────────────────────────────────────────
-
-def test_extract_title_direct():
-    data = {"title": "My Page"}
-    assert Crawl4aiFetchProvider._extract_title(data) == "My Page"
-
-
-def test_extract_title_metadata_fallback():
-    data = {"metadata": {"title": "From Metadata"}}
-    assert Crawl4aiFetchProvider._extract_title(data) == "From Metadata"
-
-
-def test_extract_title_direct_wins_over_metadata():
-    data = {"title": "Direct", "metadata": {"title": "Meta"}}
-    assert Crawl4aiFetchProvider._extract_title(data) == "Direct"
-
-
-def test_extract_title_empty():
-    assert Crawl4aiFetchProvider._extract_title({}) == ""
-    assert Crawl4aiFetchProvider._extract_title({"title": ""}) == ""
-
-
-# ── _decode_results ────────────────────────────────────────────────
-
-def test_decode_results_top_level_list():
-    data = [{"success": True}, {"success": False}]
-    result = Crawl4aiFetchProvider()._decode_results(data)
-    assert len(result) == 2
-
-
-def test_decode_results_results_key():
-    data = {"results": [{"success": True}], "other": "x"}
-    result = Crawl4aiFetchProvider()._decode_results(data)
-    assert len(result) == 1
-
-
-def test_decode_results_data_key():
-    data = {"data": [{"success": True}]}
-    result = Crawl4aiFetchProvider()._decode_results(data)
-    assert len(result) == 1
-
-
-def test_decode_results_single_dict():
-    data = {"success": True, "fit_markdown": "# Hi"}
-    result = Crawl4aiFetchProvider()._decode_results(data)
-    assert len(result) == 1
-    assert result[0] is data
-
-
-def test_decode_results_filters_non_dicts():
-    data = [{"success": True}, "string", 42]
-    result = Crawl4aiFetchProvider()._decode_results(data)
-    assert len(result) == 1
-
-
-def test_decode_results_unknown_type():
-    assert Crawl4aiFetchProvider()._decode_results("hello") == []
-    assert Crawl4aiFetchProvider()._decode_results(42) == []
-
-
-# ── create_from_settings ───────────────────────────────────────────
-
-def test_create_from_settings_default_url():
-    prov = Crawl4aiFetchProvider.create_from_settings({})
-    assert prov._base_url == "http://localhost:11235"
-
-
-def test_create_from_settings_custom_url():
-    prov = Crawl4aiFetchProvider.create_from_settings({"crawl4ai_url": "http://myhost:9999/"})
-    assert prov._base_url == "http://myhost:9999"
-
-
-def test_create_from_settings_strips_trailing_slash():
-    prov = Crawl4aiFetchProvider.create_from_settings({"crawl4ai_url": "http://x.y/"})
-    assert prov._base_url == "http://x.y"
-
-
-def test_create_from_settings_whitespace_url():
-    prov = Crawl4aiFetchProvider.create_from_settings({"crawl4ai_url": "  "})
-    assert prov._base_url == "http://localhost:11235"
-
-
-# ── name property ──────────────────────────────────────────────────
-
-def test_provider_name():
-    assert Crawl4aiFetchProvider().name == "crawl4ai"
 
 
 class _FakeAsyncClient:
@@ -162,34 +30,158 @@ def _make_fake_client(resp_or_error):
     return _FakeAsyncClient(resp_or_error)
 
 
+# ── _extract_markdown ──────────────────────────────────────────────
+
+def test_extract_markdown_fit_priority():
+    result = {
+        "markdown": {
+            "fit_markdown": "# Fit content",
+            "raw_markdown": "# Raw content",
+        }
+    }
+    assert Crawl4aiFetchProvider._extract_markdown(result) == "# Fit content"
+
+
+def test_extract_markdown_raw_fallback():
+    result = {"markdown": {"raw_markdown": "# Raw only"}}
+    assert Crawl4aiFetchProvider._extract_markdown(result) == "# Raw only"
+
+
+def test_extract_markdown_missing_markdown_key():
+    assert Crawl4aiFetchProvider._extract_markdown({}) == ""
+    assert Crawl4aiFetchProvider._extract_markdown({"markdown": None}) == ""
+
+
+def test_extract_markdown_empty_values():
+    result = {"markdown": {"fit_markdown": "", "raw_markdown": "  "}}
+    assert Crawl4aiFetchProvider._extract_markdown(result) == ""
+
+
+# ── _extract_title ─────────────────────────────────────────────────
+
+def test_extract_title_from_metadata():
+    result = {"metadata": {"title": "My Page"}}
+    assert Crawl4aiFetchProvider._extract_title(result) == "My Page"
+
+
+def test_extract_title_missing_metadata():
+    assert Crawl4aiFetchProvider._extract_title({}) == ""
+    assert Crawl4aiFetchProvider._extract_title({"metadata": None}) == ""
+    assert Crawl4aiFetchProvider._extract_title({"metadata": {"title": ""}}) == ""
+
+
+# ── create_from_settings ───────────────────────────────────────────
+
+def test_create_from_settings_defaults():
+    prov = Crawl4aiFetchProvider.create_from_settings({})
+    assert prov._base_url == "http://localhost:11235"
+    assert prov._anti_bot is True
+    assert prov._timeout == 30
+
+
+def test_create_from_settings_custom_values():
+    prov = Crawl4aiFetchProvider.create_from_settings({
+        "crawl4ai_url": "http://custom:9999/",
+        "crawl4ai_anti_bot": False,
+        "crawl4ai_timeout": 45,
+    })
+    assert prov._base_url == "http://custom:9999"
+    assert prov._anti_bot is False
+    assert prov._timeout == 45
+
+
+def test_create_from_settings_whitespace_url():
+    prov = Crawl4aiFetchProvider.create_from_settings({"crawl4ai_url": "  "})
+    assert prov._base_url == "http://localhost:11235"
+
+
+# ── name property ──────────────────────────────────────────────────
+
+def test_provider_name():
+    assert Crawl4aiFetchProvider().name == "crawl4ai"
+
+
 # ── fetch: success path ────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_fetch_success_fit_markdown():
+async def test_fetch_success():
     prov = Crawl4aiFetchProvider(base_url="http://test.local")
 
     fake_resp = MagicMock()
     fake_resp.status_code = 200
     fake_resp.json.return_value = {
         "success": True,
-        "fit_markdown": "# Hello World",
-        "title": "Test Page",
+        "results": [{
+            "success": True,
+            "url": "https://example.com",
+            "markdown": {
+                "fit_markdown": "# Hello World",
+                "raw_markdown": "# Hello World\n\nExtra stuff",
+            },
+            "metadata": {"title": "Test Page"},
+        }],
     }
 
     fake_client = _make_fake_client(fake_resp)
 
     with patch("services.search.fetch_providers.httpx.AsyncClient", return_value=fake_client):
-        result = await prov.fetch("https://example.com", timeout=10)
+        result = await prov.fetch("https://example.com")
 
     assert result.success is True
     assert result.content == "# Hello World"
     assert result.title == "Test Page"
     assert result.url == "https://example.com"
     assert len(fake_client.post_calls) == 1
-    assert fake_client.post_calls[0] == (
-        "http://test.local/md",
-        {"json": {"url": "https://example.com", "f": "fit"}},
-    )
+    assert fake_client.post_calls[0][0] == "http://test.local/crawl"
+    payload = fake_client.post_calls[0][1]["json"]
+    assert payload["urls"] == ["https://example.com"]
+    assert payload["browser_config"]["enable_stealth"] is True
+    assert payload["crawler_config"]["magic"] is True
+
+
+@pytest.mark.asyncio
+async def test_fetch_anti_bot_disabled():
+    prov = Crawl4aiFetchProvider(base_url="http://test.local", anti_bot=False)
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 200
+    fake_resp.json.return_value = {
+        "success": True,
+        "results": [{
+            "success": True,
+            "markdown": {"raw_markdown": "content"},
+        }],
+    }
+
+    fake_client = _make_fake_client(fake_resp)
+
+    with patch("services.search.fetch_providers.httpx.AsyncClient", return_value=fake_client):
+        await prov.fetch("https://example.com")
+
+    payload = fake_client.post_calls[0][1]["json"]
+    assert payload["browser_config"]["enable_stealth"] is False
+    assert payload["crawler_config"]["magic"] is False
+    assert payload["crawler_config"]["simulate_user"] is False
+
+
+@pytest.mark.asyncio
+async def test_fetch_uses_custom_timeout():
+    prov = Crawl4aiFetchProvider(base_url="http://test.local", timeout=45)
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 200
+    fake_resp.json.return_value = {
+        "success": True,
+        "results": [{"success": True, "markdown": {"raw_markdown": "ok"}}],
+    }
+
+    fake_client = _make_fake_client(fake_resp)
+
+    with patch("services.search.fetch_providers.httpx.AsyncClient", return_value=fake_client) as mock_cls:
+        await prov.fetch("https://example.com")
+
+    # The timeout is passed to AsyncClient constructor
+    assert mock_cls.call_args[1]["timeout"] == 45
 
 
 # ── fetch: http error ──────────────────────────────────────────────
@@ -228,17 +220,42 @@ async def test_fetch_http_403():
     assert "HTTP 403" in result.error
 
 
-# ── fetch: success=false in body ───────────────────────────────────
+# ── fetch: top-level success=false ─────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_fetch_success_false_top_level():
+async def test_fetch_top_level_failure():
     prov = Crawl4aiFetchProvider(base_url="http://test.local")
 
     fake_resp = MagicMock()
     fake_resp.status_code = 200
     fake_resp.json.return_value = {
         "success": False,
-        "error_message": "Blocked by anti-bot protection: DataDome captcha",
+        "error_message": "Server configuration error",
+    }
+
+    fake_client = _make_fake_client(fake_resp)
+
+    with patch("services.search.fetch_providers.httpx.AsyncClient", return_value=fake_client):
+        result = await prov.fetch("https://example.com")
+
+    assert result.success is False
+    assert "Server configuration error" in result.error
+
+
+# ── fetch: per-result success=false ────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_fetch_result_level_failure():
+    prov = Crawl4aiFetchProvider(base_url="http://test.local")
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 200
+    fake_resp.json.return_value = {
+        "success": True,
+        "results": [{
+            "success": False,
+            "error_message": "Blocked by anti-bot protection: DataDome captcha",
+        }],
     }
 
     fake_client = _make_fake_client(fake_resp)
@@ -248,27 +265,6 @@ async def test_fetch_success_false_top_level():
 
     assert result.success is False
     assert "DataDome" in result.error
-
-
-@pytest.mark.asyncio
-async def test_fetch_success_false_nested_result():
-    prov = Crawl4aiFetchProvider(base_url="http://test.local")
-
-    fake_resp = MagicMock()
-    fake_resp.status_code = 200
-    fake_resp.json.return_value = {
-        "results": [
-            {"success": False, "error_message": "Page timed out"}
-        ]
-    }
-
-    fake_client = _make_fake_client(fake_resp)
-
-    with patch("services.search.fetch_providers.httpx.AsyncClient", return_value=fake_client):
-        result = await prov.fetch("https://example.com")
-
-    assert result.success is False
-    assert "Page timed out" in result.error
 
 
 # ── fetch: connection error ────────────────────────────────────────
@@ -293,27 +289,27 @@ async def test_fetch_connect_error():
 @pytest.mark.asyncio
 async def test_fetch_timeout():
     import httpx
-    prov = Crawl4aiFetchProvider(base_url="http://test.local")
+    prov = Crawl4aiFetchProvider(base_url="http://test.local", timeout=30)
 
     fake_client = _make_fake_client(httpx.TimeoutException("Timed out"))
 
     with patch("services.search.fetch_providers.httpx.AsyncClient", return_value=fake_client):
-        result = await prov.fetch("https://example.com", timeout=30)
+        result = await prov.fetch("https://example.com")
 
     assert result.success is False
     assert "timed out" in result.error
     assert "30s" in result.error
 
 
-# ── fetch: invalid response structure ──────────────────────────────
+# ── fetch: invalid response ────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_fetch_invalid_response_structure():
+async def test_fetch_missing_results():
     prov = Crawl4aiFetchProvider(base_url="http://test.local")
 
     fake_resp = MagicMock()
     fake_resp.status_code = 200
-    fake_resp.json.return_value = "plain string"
+    fake_resp.json.return_value = {"success": True}
 
     fake_client = _make_fake_client(fake_resp)
 
@@ -321,7 +317,24 @@ async def test_fetch_invalid_response_structure():
         result = await prov.fetch("https://example.com")
 
     assert result.success is False
-    assert "Invalid response structure" in result.error
+    assert "missing results" in result.error
+
+
+@pytest.mark.asyncio
+async def test_fetch_empty_results():
+    prov = Crawl4aiFetchProvider(base_url="http://test.local")
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 200
+    fake_resp.json.return_value = {"success": True, "results": []}
+
+    fake_client = _make_fake_client(fake_resp)
+
+    with patch("services.search.fetch_providers.httpx.AsyncClient", return_value=fake_client):
+        result = await prov.fetch("https://example.com")
+
+    assert result.success is False
+    assert "missing results" in result.error
 
 
 # ── fetch: json decode error ───────────────────────────────────────
@@ -341,3 +354,28 @@ async def test_fetch_json_decode_error():
 
     assert result.success is False
     assert result.error is not None
+
+
+# ── fetch: markdown fallback ───────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_fetch_falls_back_to_raw_markdown():
+    prov = Crawl4aiFetchProvider(base_url="http://test.local")
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 200
+    fake_resp.json.return_value = {
+        "success": True,
+        "results": [{
+            "success": True,
+            "markdown": {"raw_markdown": "# Only raw available"},
+        }],
+    }
+
+    fake_client = _make_fake_client(fake_resp)
+
+    with patch("services.search.fetch_providers.httpx.AsyncClient", return_value=fake_client):
+        result = await prov.fetch("https://example.com")
+
+    assert result.success is True
+    assert result.content == "# Only raw available"

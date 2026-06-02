@@ -80,17 +80,25 @@ class SimpleFetchProvider(FetchProvider):
 
 
 class Crawl4aiFetchProvider(FetchProvider):
-    """Fetch provider using the Crawl4ai REST API (/md endpoint).
+    """Fetch provider using the Crawl4ai REST API (/crawl endpoint).
 
-    Returns clean markdown content. Handles JS-rendered pages and
-    dynamic content. Connects to a self-hosted crawl4ai instance
-    (typically a Docker container). No API key required.
+    Returns clean markdown content. Handles JS-rendered pages,
+    dynamic content, and anti-bot protection. Connects to a
+    self-hosted crawl4ai instance (typically a Docker container).
+    No API key required.
     """
 
     DEFAULT_BASE_URL = "http://localhost:11235"
 
-    def __init__(self, base_url: str = DEFAULT_BASE_URL):
+    def __init__(
+        self,
+        base_url: str = DEFAULT_BASE_URL,
+        anti_bot: bool = True,
+        timeout: int = 30,
+    ):
         self._base_url = base_url.rstrip("/")
+        self._anti_bot = anti_bot
+        self._timeout = timeout
 
     @property
     def name(self) -> str:
@@ -101,35 +109,28 @@ class Crawl4aiFetchProvider(FetchProvider):
         base_url = (settings.get("crawl4ai_url") or "").strip()
         if not base_url:
             base_url = cls.DEFAULT_BASE_URL
-        return cls(base_url=base_url)
+        anti_bot = settings.get("crawl4ai_anti_bot", True)
+        timeout = int(settings.get("crawl4ai_timeout", 30))
+        return cls(base_url=base_url, anti_bot=anti_bot, timeout=timeout)
 
     @staticmethod
-    def _extract_markdown(data: Dict[str, Any]) -> str:
-        """Extract markdown content from crawl4ai response.
+    def _extract_markdown(result: Dict[str, Any]) -> str:
+        """Extract markdown from a /crawl result object.
 
-        Tries fields in order of quality: fit > filtered > raw.
-        Also checks for nested markdown object (older API versions).
+        The /crawl endpoint returns markdown as a nested object:
+        result["markdown"]["fit_markdown"] or result["markdown"]["raw_markdown"].
         """
-        for key in ("fit_markdown", "filtered_markdown", "markdown", "raw_markdown", "content", "page_content"):
-            value = data.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
-
-        markdown_field = data.get("markdown")
-        if isinstance(markdown_field, dict):
+        md = result.get("markdown")
+        if isinstance(md, dict):
             for key in ("fit_markdown", "filtered_markdown", "markdown", "raw_markdown"):
-                value = markdown_field.get(key)
+                value = md.get(key)
                 if isinstance(value, str) and value.strip():
                     return value.strip()
-
         return ""
 
     @staticmethod
-    def _extract_title(data: Dict[str, Any]) -> str:
-        title = data.get("title", "")
-        if title and isinstance(title, str):
-            return title.strip()
-        metadata = data.get("metadata")
+    def _extract_title(result: Dict[str, Any]) -> str:
+        metadata = result.get("metadata")
         if isinstance(metadata, dict):
             title = metadata.get("title", "")
             if title and isinstance(title, str):
@@ -137,11 +138,25 @@ class Crawl4aiFetchProvider(FetchProvider):
         return ""
 
     async def fetch(self, url: str, timeout: int = 15) -> FetchResult:
-        endpoint = f"{self._base_url}/md"
-        payload = {"url": url, "f": "fit"}
+        endpoint = f"{self._base_url}/crawl"
+        effective_timeout = timeout if timeout != 15 else self._timeout
+        anti_bot = self._anti_bot if timeout != 15 else self._anti_bot
+
+        payload = {
+            "urls": [url],
+            "browser_config": {
+                "headless": True,
+                "enable_stealth": anti_bot,
+            },
+            "crawler_config": {
+                "magic": anti_bot,
+                "simulate_user": anti_bot,
+                "cache_mode": {"type": "CacheMode", "params": "BYPASS"},
+            },
+        }
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=effective_timeout) as client:
                 resp = await client.post(endpoint, json=payload)
 
             if resp.status_code != 200:
@@ -166,14 +181,14 @@ class Crawl4aiFetchProvider(FetchProvider):
                     error=f"Crawl4ai: {err}",
                 )
 
-            results = self._decode_results(data)
-            if not results:
+            results = data.get("results", [])
+            if not results or not isinstance(results, list):
                 return FetchResult(
                     url=url,
                     title="",
                     content="",
                     success=False,
-                    error="Invalid response structure from Crawl4ai",
+                    error="Invalid response structure from Crawl4ai (missing results)",
                 )
 
             result = results[0]
@@ -195,7 +210,7 @@ class Crawl4aiFetchProvider(FetchProvider):
                 success=True,
             )
 
-        except httpx.ConnectError as e:
+        except httpx.ConnectError:
             return FetchResult(
                 url=url,
                 title="",
@@ -209,7 +224,7 @@ class Crawl4aiFetchProvider(FetchProvider):
                 title="",
                 content="",
                 success=False,
-                error=f"Crawl4ai timed out after {timeout}s",
+                error=f"Crawl4ai timed out after {effective_timeout}s",
             )
         except Exception as e:
             logger.error(f"Crawl4aiFetchProvider failed for {url}: {e}")
@@ -220,19 +235,3 @@ class Crawl4aiFetchProvider(FetchProvider):
                 success=False,
                 error=str(e),
             )
-
-    def _decode_results(self, data: Any) -> list:
-        """Decode crawl4ai response into a list of result dicts.
-
-        Handles multiple response shapes: top-level array, {results: [...]},
-        {data: [...]}, or single object wrapped in a list.
-        """
-        if isinstance(data, list):
-            return [item for item in data if isinstance(item, dict)]
-        if isinstance(data, dict):
-            for key in ("results", "data"):
-                val = data.get(key)
-                if isinstance(val, list):
-                    return [item for item in val if isinstance(item, dict)]
-            return [data]
-        return []

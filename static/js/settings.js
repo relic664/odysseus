@@ -2166,6 +2166,10 @@ async function initFetchSettings() {
   var provSel = el('set-fetchProvider');
   var urlInput = el('set-fetchUrl');
   var urlRow = el('set-fetchUrlRow');
+  var antiBotCb = el('set-fetchAntiBot');
+  var antiBotRow = el('set-fetchAntiBotRow');
+  var timeoutInput = el('set-fetchTimeout');
+  var timeoutRow = el('set-fetchTimeoutRow');
   var hint = el('set-fetchHint');
   var msg = el('set-fetchMsg');
   var _fetchSettings = {};
@@ -2177,6 +2181,8 @@ async function initFetchSettings() {
       _fetchSettings = await res.json();
       if (_fetchSettings.fetch_provider) provSel.value = _fetchSettings.fetch_provider;
       if (urlInput) urlInput.value = (_fetchSettings.crawl4ai_url || '').trim() || 'http://localhost:11235';
+      if (antiBotCb) antiBotCb.checked = _fetchSettings.crawl4ai_anti_bot !== false;
+      if (timeoutInput) timeoutInput.value = _fetchSettings.crawl4ai_timeout || 30;
     } catch (_) {}
     try {
       var provRes = await fetch('/api/search/fetch-providers', { credentials: 'same-origin' });
@@ -2190,7 +2196,10 @@ async function initFetchSettings() {
 
   function updateFetchVisibility() {
     var prov = provSel.value;
-    if (urlRow) urlRow.style.display = prov === 'crawl4ai' ? 'flex' : 'none';
+    var isC4a = prov === 'crawl4ai';
+    if (urlRow) urlRow.style.display = isC4a ? 'flex' : 'none';
+    if (antiBotRow) antiBotRow.style.display = isC4a ? 'flex' : 'none';
+    if (timeoutRow) timeoutRow.style.display = isC4a ? 'flex' : 'none';
     hint.textContent = _fetchProviderHints[prov] || '';
   }
 
@@ -2198,6 +2207,8 @@ async function initFetchSettings() {
     try {
       var payload = { fetch_provider: provSel.value };
       if (urlInput) payload.crawl4ai_url = urlInput.value.trim();
+      if (antiBotCb) payload.crawl4ai_anti_bot = antiBotCb.checked;
+      if (timeoutInput) payload.crawl4ai_timeout = parseInt(timeoutInput.value, 10) || 30;
       await fetch('/api/auth/settings', {
         method: 'POST',
         credentials: 'same-origin',
@@ -2231,6 +2242,8 @@ async function initFetchSettings() {
 
   provSel.addEventListener('change', function() { updateFetchVisibility(); saveFetch(); _syncFetchPicker(); });
   if (urlInput) urlInput.addEventListener('change', saveFetch);
+  if (antiBotCb) antiBotCb.addEventListener('change', saveFetch);
+  if (timeoutInput) timeoutInput.addEventListener('change', saveFetch);
 
   // ── Provider picker with logos ──
   var picker = el('fetch-provider-picker');

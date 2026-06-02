@@ -83,6 +83,8 @@ DEFAULT_SETTINGS = {
     "fetch_provider": "simple",
     "fetch_fallback_chain": [],
     "crawl4ai_url": "",
+    "crawl4ai_anti_bot": True,
+    "crawl4ai_timeout": 30,
     "research_endpoint_id": "",
     "research_model": "",
     "research_search_provider": "",

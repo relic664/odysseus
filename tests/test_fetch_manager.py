@@ -263,13 +263,18 @@ async def test_fetch_provider_exception_tried_next():
 @pytest.mark.asyncio
 async def test_crawl4ai_factory_creates_with_url():
     fm = FetchManager()
-    # Use a unique name to avoid class-level cache collision
     fm.register_factory("c4ai_custom", Crawl4aiFetchProvider.create_from_settings)
 
-    result = fm._resolve_provider("c4ai_custom", {"crawl4ai_url": "http://custom:1234/"})
+    result = fm._resolve_provider("c4ai_custom", {
+        "crawl4ai_url": "http://custom:1234/",
+        "crawl4ai_anti_bot": False,
+        "crawl4ai_timeout": 45,
+    })
 
     assert isinstance(result, Crawl4aiFetchProvider)
     assert result._base_url == "http://custom:1234"
+    assert result._anti_bot is False
+    assert result._timeout == 45
 
 
 @pytest.mark.asyncio
@@ -281,3 +286,5 @@ async def test_crawl4ai_factory_defaults():
 
     assert isinstance(result, Crawl4aiFetchProvider)
     assert result._base_url == "http://localhost:11235"
+    assert result._anti_bot is True
+    assert result._timeout == 30

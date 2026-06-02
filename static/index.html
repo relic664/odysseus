@@ -1655,11 +1655,22 @@
                   <option value="crawl4ai" data-fetch-logo="crawl4ai">Crawl4ai (markdown)</option>
                 </select>
               </div>
-              <div id="set-fetchUrlRow" class="settings-row" style="display:none;">
-                 <label class="settings-label">URL</label>
-                 <input id="set-fetchUrl" type="text" placeholder="http://localhost:11235" class="settings-select">
-               </div>
-               <div id="set-fetchHint" class="admin-toggle-sub"></div>
+             <div id="set-fetchUrlRow" class="settings-row" style="display:none;">
+                  <label class="settings-label">URL</label>
+                  <input id="set-fetchUrl" type="text" placeholder="http://localhost:11235" class="settings-select">
+                </div>
+                <div id="set-fetchAntiBotRow" class="settings-row" style="display:none;">
+                  <label class="settings-label">Anti-bot mode</label>
+                  <label style="flex:1;display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:0;">
+                    <input type="checkbox" id="set-fetchAntiBot" checked style="width:16px;height:16px;accent-color:var(--accent);">
+                    <span style="font-size:11px;opacity:0.6;">Stealth + magic</span>
+                  </label>
+                </div>
+                <div id="set-fetchTimeoutRow" class="settings-row" style="display:none;">
+                  <label class="settings-label">Timeout (s)</label>
+                  <input id="set-fetchTimeout" type="number" min="5" max="120" value="30" class="settings-select" style="width:80px;flex:none;">
+                </div>
+                <div id="set-fetchHint" class="admin-toggle-sub"></div>
                <div id="set-fetchMsg" style="font-size:11px;"></div>
             </div>
           </div>
