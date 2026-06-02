@@ -1652,10 +1652,15 @@
                 </div>
                 <select id="set-fetchProvider" class="settings-select" style="display:none;">
                   <option value="simple" data-fetch-logo="simple">Simple (HTTP + BeautifulSoup)</option>
+                  <option value="crawl4ai" data-fetch-logo="crawl4ai">Crawl4ai (markdown)</option>
                 </select>
               </div>
-              <div id="set-fetchHint" class="admin-toggle-sub"></div>
-              <div id="set-fetchMsg" style="font-size:11px;"></div>
+              <div id="set-fetchUrlRow" class="settings-row" style="display:none;">
+                 <label class="settings-label">URL</label>
+                 <input id="set-fetchUrl" type="text" placeholder="http://localhost:11235" class="settings-select">
+               </div>
+               <div id="set-fetchHint" class="admin-toggle-sub"></div>
+               <div id="set-fetchMsg" style="font-size:11px;"></div>
             </div>
           </div>
         </div>

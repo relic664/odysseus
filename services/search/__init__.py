@@ -9,7 +9,7 @@ from .core import (
     update_search_config,
 )
 from .content import fetch_webpage_content
-from .fetch_providers import FetchResult, FetchProvider, SimpleFetchProvider, FETCH_PROVIDER_INFO
+from .fetch_providers import FetchResult, FetchProvider, SimpleFetchProvider, Crawl4aiFetchProvider, FETCH_PROVIDER_INFO
 from .fetch_manager import FetchManager
 from .providers import searxng_search, searxng_search_api, PROVIDER_INFO
 from .analytics import get_search_stats, SearchEngineError, NetworkError, ParseError, RateLimitError
@@ -28,6 +28,7 @@ __all__ = [
     "FetchProvider",
     "FetchManager",
     "SimpleFetchProvider",
+    "Crawl4aiFetchProvider",
     "FETCH_PROVIDER_INFO",
     "get_search_config",
     "get_search_stats",

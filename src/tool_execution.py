@@ -462,6 +462,7 @@ async def _direct_fallback(
 
         if tool == "web_fetch":
             from services.search.fetch_manager import FetchManager
+            from src.settings import load_settings
             raw = content.strip()
             url = ""
             # Accept either a JSON arg ({"url": "..."}) or a plain URL/domain.
@@ -485,9 +486,12 @@ async def _direct_fallback(
             # Accept bare domains like "example.com" by defaulting to https.
             if not low.startswith(("http://", "https://")):
                 url = "https://" + url
+            _fetch_settings = load_settings()
+            _fetch_provider = (_fetch_settings.get("fetch_provider") or "simple").strip()
+            _fetch_fallbacks = _fetch_settings.get("fetch_fallback_chain") or []
             try:
                 result = await asyncio.wait_for(
-                    FetchManager().fetch(url, "simple", timeout=15),
+                    FetchManager().fetch(url, _fetch_provider, _fetch_settings, fallbacks=_fetch_fallbacks, timeout=15),
                     timeout=15,
                 )
             except asyncio.TimeoutError:

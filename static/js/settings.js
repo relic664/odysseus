@@ -1397,13 +1397,16 @@ var _SEARCH_PROVIDER_LOGOS = {
 
 var _fetchProviderHints = {
   simple: 'Built-in fetcher using HTTP + BeautifulSoup. No API key required.',
+  crawl4ai: 'Returns clean markdown. Handles JS-rendered pages. Requires a Crawl4ai container.',
 };
 var _fetchLabels = {
   simple: 'Simple (HTTP + BS4)',
+  crawl4ai: 'Crawl4ai',
 };
 
 var _FETCH_PROVIDER_LOGOS = {
   simple: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
+  crawl4ai: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
 };
 
 /* ── Deep Research Model (AI tab) ── */
@@ -2161,15 +2164,25 @@ function initAccount() {
 /* ── Fetch Provider (Search tab) ── */
 async function initFetchSettings() {
   var provSel = el('set-fetchProvider');
+  var urlInput = el('set-fetchUrl');
+  var urlRow = el('set-fetchUrlRow');
   var hint = el('set-fetchHint');
   var msg = el('set-fetchMsg');
   var _fetchSettings = {};
+  var _availableProviders = {};
 
   async function loadSettings() {
     try {
       var res = await fetch('/api/auth/settings', { credentials: 'same-origin' });
       _fetchSettings = await res.json();
       if (_fetchSettings.fetch_provider) provSel.value = _fetchSettings.fetch_provider;
+      if (urlInput) urlInput.value = (_fetchSettings.crawl4ai_url || '').trim() || 'http://localhost:11235';
+    } catch (_) {}
+    try {
+      var provRes = await fetch('/api/search/fetch-providers', { credentials: 'same-origin' });
+      var provs = await provRes.json();
+      _availableProviders = {};
+      provs.forEach(function(p) { _availableProviders[p.id] = p.available; });
     } catch (_) {}
     updateFetchVisibility();
     updateFetchStatus();
@@ -2177,16 +2190,19 @@ async function initFetchSettings() {
 
   function updateFetchVisibility() {
     var prov = provSel.value;
+    if (urlRow) urlRow.style.display = prov === 'crawl4ai' ? 'flex' : 'none';
     hint.textContent = _fetchProviderHints[prov] || '';
   }
 
   async function saveFetch() {
     try {
+      var payload = { fetch_provider: provSel.value };
+      if (urlInput) payload.crawl4ai_url = urlInput.value.trim();
       await fetch('/api/auth/settings', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fetch_provider: provSel.value }),
+        body: JSON.stringify(payload),
       });
       msg.textContent = 'Saved';
       msg.style.color = 'var(--fg)';
@@ -2203,12 +2219,18 @@ async function initFetchSettings() {
       var s = await res.json();
       var active = s.fetch_provider || 'simple';
       var label = _fetchLabels[active] || active;
-      msg.textContent = 'Active: ' + label;
+      var extra = '';
+      if (active === 'crawl4ai') {
+        var cUrl = (s.crawl4ai_url || '').trim() || 'http://localhost:11235';
+        extra = ' (' + cUrl + ')';
+      }
+      msg.textContent = 'Active: ' + label + extra;
       msg.style.color = 'var(--fg)';
     } catch (_) {}
   }
 
   provSel.addEventListener('change', function() { updateFetchVisibility(); saveFetch(); _syncFetchPicker(); });
+  if (urlInput) urlInput.addEventListener('change', saveFetch);
 
   // ── Provider picker with logos ──
   var picker = el('fetch-provider-picker');
@@ -2223,9 +2245,11 @@ async function initFetchSettings() {
     pickerMenu.innerHTML = Array.from(provSel.options).map(function(o) {
       var logo = _fetchProviderLogoSvg(o.dataset.fetchLogo);
       var active = o.value === provSel.value ? ' active' : '';
-      return '<div class="adm-provider-item' + active + '" role="option" data-value="' + o.value.replace(/"/g, '&quot;') + '">' +
+      var avail = _availableProviders[o.value] !== false;
+      var disabledClass = !avail ? ' disabled' : '';
+      return '<div class="adm-provider-item' + active + disabledClass + '" role="option" data-value="' + o.value.replace(/"/g, '&quot;') + '"' + (!avail ? ' aria-disabled="true"' : '') + '>' +
         '<span class="adm-provider-logo">' + logo + '</span>' +
-        '<span>' + o.textContent + '</span>' +
+        '<span>' + o.textContent + (!avail ? ' (unavailable)' : '') + '</span>' +
       '</div>';
     }).join('');
   }
@@ -2245,7 +2269,7 @@ async function initFetchSettings() {
     });
     pickerMenu.addEventListener('click', function(e) {
       var item = e.target.closest('.adm-provider-item');
-      if (!item) return;
+      if (!item || item.classList.contains('disabled')) return;
       provSel.value = item.dataset.value;
       provSel.dispatchEvent(new Event('change', { bubbles: true }));
       pickerMenu.classList.add('hidden');

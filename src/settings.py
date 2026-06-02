@@ -82,6 +82,7 @@ DEFAULT_SETTINGS = {
     "serper_api_key": "",
     "fetch_provider": "simple",
     "fetch_fallback_chain": [],
+    "crawl4ai_url": "",
     "research_endpoint_id": "",
     "research_model": "",
     "research_search_provider": "",
