@@ -151,7 +151,7 @@ class Crawl4aiFetchProvider(FetchProvider):
             "crawler_config": {
                 "magic": anti_bot,
                 "simulate_user": anti_bot,
-                "cache_mode": {"type": "CacheMode", "params": "BYPASS"},
+                "cache_mode": "bypass",
             },
         }
 
