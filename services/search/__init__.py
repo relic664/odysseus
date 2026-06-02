@@ -9,6 +9,8 @@ from .core import (
     update_search_config,
 )
 from .content import fetch_webpage_content
+from .fetch_providers import FetchResult, FetchProvider, SimpleFetchProvider
+from .fetch_manager import FetchManager
 from .providers import searxng_search, searxng_search_api, PROVIDER_INFO
 from .analytics import get_search_stats, SearchEngineError, NetworkError, ParseError, RateLimitError
 from .service import SearchService, SearchResult, SearchResponse
@@ -22,6 +24,10 @@ __all__ = [
     "atomic_web_search",
     "comprehensive_web_search",
     "fetch_webpage_content",
+    "FetchResult",
+    "FetchProvider",
+    "FetchManager",
+    "SimpleFetchProvider",
     "get_search_config",
     "get_search_stats",
     "invalidate_search_cache",

@@ -461,10 +461,7 @@ async def _direct_fallback(
             return {"output": output, "exit_code": 0, "sources": sources}
 
         if tool == "web_fetch":
-            # Lightweight single-URL fetch. Wraps the SSRF-safe fetcher used
-            # by deep research, so private/loopback/metadata addresses are
-            # already blocked there.
-            from src.search.content import fetch_webpage_content
+            from services.search.fetch_manager import FetchManager
             raw = content.strip()
             url = ""
             # Accept either a JSON arg ({"url": "..."}) or a plain URL/domain.
@@ -488,35 +485,28 @@ async def _direct_fallback(
             # Accept bare domains like "example.com" by defaulting to https.
             if not low.startswith(("http://", "https://")):
                 url = "https://" + url
-            loop = asyncio.get_running_loop()
             try:
                 result = await asyncio.wait_for(
-                    loop.run_in_executor(None, lambda: fetch_webpage_content(url, timeout=10)),
-                    timeout=30,
+                    FetchManager().fetch(url, "simple", timeout=15),
+                    timeout=15,
                 )
             except asyncio.TimeoutError:
                 return {"error": f"web_fetch: timed out fetching {url}", "exit_code": 1}
             except Exception as e:
-                # Direct URL fetches can hit bot protection / auth walls
-                # (e.g. eBay 403). Treat that as a tool failure the model can
-                # reason around, not an uncaught chat-stream 500.
                 return {"error": f"web_fetch: {url}: {e}", "exit_code": 1}
-            err = result.get("error")
-            text = (result.get("content") or "").strip()
-            title = result.get("title") or ""
-
-            if not text:
-                if err:
-                    return {"error": f"web_fetch: {url}: {err}", "exit_code": 1}
-                # No extractable text: non-HTML body, or a pure client-rendered
-                # shell. The agent can fall back to the builtin_browser tool.
-                return {"error": f"web_fetch: {url}: no readable text content (not HTML, or the page needs JS/login)", "exit_code": 1}
-
-            header = (f"# {title}\n" if title else "") + f"Source: {url}\n\n"
-            output = header + text
-            if len(output) > MAX_OUTPUT_CHARS:
-                output = output[:MAX_OUTPUT_CHARS] + "\n\n[...truncated]"
-            return {"output": output, "exit_code": 0}
+            if not result.success or not result.content.strip():
+                err_msg = result.error or "no readable text content (not HTML, or the page needs JS/login)"
+                return {"error": f"web_fetch: {url}: {err_msg}", "exit_code": 1}
+            text = result.content.strip()
+            title = result.title or ""
+            if len(text) > MAX_OUTPUT_CHARS:
+                text = text[:MAX_OUTPUT_CHARS] + "\n\n[...truncated]"
+            output = text + f"\n\n[Citation index: {citation_index}]"
+            return {
+                "output": output,
+                "exit_code": 0,
+                "source": {"index": citation_index, "title": title, "url": url},
+            }
 
         # manage_memory / generate_image still live as MCP servers
         # (mcp_servers/{memory,image_gen}_server.py); the MCP path above
