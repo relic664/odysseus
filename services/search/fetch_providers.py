@@ -155,9 +155,22 @@ class Crawl4aiFetchProvider(FetchProvider):
                 "magic": anti_bot,
                 "simulate_user": anti_bot,
                 "cache_mode": "bypass",
-                "only_text": self._only_text,
+                "excluded_tags": ["nav", "footer", "header", "aside", "form"],
+                "remove_overlay_elements": True,
+                "remove_forms": True,
             },
         }
+
+        if self._only_text:
+            payload["crawler_config"]["markdown_generator"] = {
+                "type": "DefaultMarkdownGenerator",
+                "params": {
+                    "options": {
+                        "ignore_links": True,
+                        "ignore_images": True,
+                    }
+                },
+            }
 
         try:
             async with httpx.AsyncClient(timeout=effective_timeout) as client:

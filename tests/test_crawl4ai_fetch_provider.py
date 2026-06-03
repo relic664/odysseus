@@ -187,7 +187,10 @@ async def test_fetch_only_text_enabled():
         await prov.fetch("https://example.com")
 
     payload = fake_client.post_calls[0][1]["json"]
-    assert payload["crawler_config"]["only_text"] is True
+    mg = payload["crawler_config"]["markdown_generator"]
+    assert mg["type"] == "DefaultMarkdownGenerator"
+    assert mg["params"]["options"]["ignore_links"] is True
+    assert mg["params"]["options"]["ignore_images"] is True
 
 
 @pytest.mark.asyncio
@@ -210,7 +213,29 @@ async def test_fetch_only_text_default_false():
         await prov.fetch("https://example.com")
 
     payload = fake_client.post_calls[0][1]["json"]
-    assert payload["crawler_config"]["only_text"] is False
+    assert "markdown_generator" not in payload["crawler_config"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_structural_cleanup_always_present():
+    prov = Crawl4aiFetchProvider(base_url="http://test.local")
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 200
+    fake_resp.json.return_value = {
+        "success": True,
+        "results": [{"success": True, "markdown": {"raw_markdown": "ok"}}],
+    }
+
+    fake_client = _make_fake_client(fake_resp)
+
+    with patch("services.search.fetch_providers.httpx.AsyncClient", return_value=fake_client):
+        await prov.fetch("https://example.com")
+
+    cc = fake_client.post_calls[0][1]["json"]["crawler_config"]
+    assert cc["excluded_tags"] == ["nav", "footer", "header", "aside", "form"]
+    assert cc["remove_overlay_elements"] is True
+    assert cc["remove_forms"] is True
 
 
 @pytest.mark.asyncio
