@@ -203,7 +203,7 @@ NOT for "research X" / "do research on X" / "look into X" requests — those mea
 ```web_fetch
 <url or domain>
 ```
-Fetch and read the text content of a SPECIFIC URL the user names (e.g. "check example.com", "what does this page say <url>"). A bare domain like `example.com` works (defaults to https). Use this when you already have a concrete URL. For open-ended lookups use `web_search`, and for "research X" jobs use `trigger_research`.""",
+Fetch and read the text content of a SPECIFIC URL the user names (e.g. "check example.com", "what does this page say <url>"). A bare domain like `example.com` works (defaults to https). Returns the page text with a citation index. Cite the source in your response using [N] notation where N is the citation index. Use this when you already have a concrete URL. For open-ended lookups use `web_search`, and for "research X" jobs use `trigger_research`.""",
 
     "read_file": """\
 ```read_file

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request
 
 import time
 
-from services.search import get_search_config, comprehensive_web_search, PROVIDER_INFO
+from services.search import get_search_config, comprehensive_web_search, PROVIDER_INFO, FETCH_PROVIDER_INFO, FetchManager
 from services.search.core import _call_provider
 from services.search.providers import _get_provider_key, _get_search_instance
 
@@ -81,6 +81,20 @@ def setup_search_routes(config) -> APIRouter:
                 "id": pid,
                 "label": label,
                 "available": available,
+            })
+        return providers
+
+    @router.get("/api/search/fetch-providers")
+    async def list_fetch_providers():
+        """Return available fetch providers."""
+        providers = []
+        for pid, (label, needs_key, needs_url) in FETCH_PROVIDER_INFO.items():
+            available = FetchManager.is_available(pid)
+            providers.append({
+                "id": pid,
+                "label": label,
+                "available": available,
+                "needs_url": needs_url,
             })
         return providers
 

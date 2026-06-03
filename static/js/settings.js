@@ -1395,6 +1395,20 @@ var _SEARCH_PROVIDER_LOGOS = {
   disabled:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
 };
 
+var _fetchProviderHints = {
+  simple: 'Built-in fetcher using HTTP + BeautifulSoup. No API key required.',
+  crawl4ai: 'Returns clean markdown. Handles JS-rendered pages. Requires a Crawl4ai container.',
+};
+var _fetchLabels = {
+  simple: 'Simple (HTTP + BS4)',
+  crawl4ai: 'Crawl4ai',
+};
+
+var _FETCH_PROVIDER_LOGOS = {
+  simple: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
+  crawl4ai: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+};
+
 /* ── Deep Research Model (AI tab) ── */
 async function initResearchSettings() {
   var epSel = el('set-researchEndpoint');
@@ -2147,6 +2161,146 @@ function initAccount() {
   }
 }
 
+/* ── Fetch Provider (Search tab) ── */
+async function initFetchSettings() {
+  var provSel = el('set-fetchProvider');
+  var urlInput = el('set-fetchUrl');
+  var urlRow = el('set-fetchUrlRow');
+ var antiBotCb = el('set-fetchAntiBot');
+   var antiBotRow = el('set-fetchAntiBotRow');
+   var timeoutInput = el('set-fetchTimeout');
+   var timeoutRow = el('set-fetchTimeoutRow');
+   var onlyTextCb = el('set-fetchOnlyText');
+   var onlyTextRow = el('set-fetchOnlyTextRow');
+  var hint = el('set-fetchHint');
+  var msg = el('set-fetchMsg');
+  var _fetchSettings = {};
+  var _availableProviders = {};
+
+  async function loadSettings() {
+    try {
+      var res = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+      _fetchSettings = await res.json();
+      if (_fetchSettings.fetch_provider) provSel.value = _fetchSettings.fetch_provider;
+      if (urlInput) urlInput.value = (_fetchSettings.crawl4ai_url || '').trim() || 'http://localhost:11235';
+    if (antiBotCb) antiBotCb.checked = _fetchSettings.crawl4ai_anti_bot !== false;
+       if (timeoutInput) timeoutInput.value = _fetchSettings.crawl4ai_timeout || 30;
+       if (onlyTextCb) onlyTextCb.checked = !!_fetchSettings.crawl4ai_only_text;
+    } catch (_) {}
+    try {
+      var provRes = await fetch('/api/search/fetch-providers', { credentials: 'same-origin' });
+      var provs = await provRes.json();
+      _availableProviders = {};
+      provs.forEach(function(p) { _availableProviders[p.id] = p.available; });
+    } catch (_) {}
+    updateFetchVisibility();
+    updateFetchStatus();
+  }
+
+  function updateFetchVisibility() {
+    var prov = provSel.value;
+    var isC4a = prov === 'crawl4ai';
+    if (urlRow) urlRow.style.display = isC4a ? 'flex' : 'none';
+    if (antiBotRow) antiBotRow.style.display = isC4a ? 'flex' : 'none';
+    if (timeoutRow) timeoutRow.style.display = isC4a ? 'flex' : 'none';
+    if (onlyTextRow) onlyTextRow.style.display = isC4a ? 'flex' : 'none';
+    hint.textContent = _fetchProviderHints[prov] || '';
+  }
+
+  async function saveFetch() {
+    try {
+      var payload = { fetch_provider: provSel.value };
+      if (urlInput) payload.crawl4ai_url = urlInput.value.trim();
+      if (antiBotCb) payload.crawl4ai_anti_bot = antiBotCb.checked;
+      if (timeoutInput) payload.crawl4ai_timeout = parseInt(timeoutInput.value, 10) || 30;
+      if (onlyTextCb) payload.crawl4ai_only_text = onlyTextCb.checked;
+      await fetch('/api/auth/settings', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      msg.textContent = 'Saved';
+      msg.style.color = 'var(--fg)';
+      setTimeout(updateFetchStatus, 2000);
+    } catch (e) {
+      msg.textContent = 'Failed to save';
+      msg.style.color = 'var(--red)';
+    }
+  }
+
+  async function updateFetchStatus() {
+    try {
+      var res = await fetch('/api/auth/settings', { credentials: 'same-origin' });
+      var s = await res.json();
+      var active = s.fetch_provider || 'simple';
+      var label = _fetchLabels[active] || active;
+      var extra = '';
+      if (active === 'crawl4ai') {
+        var cUrl = (s.crawl4ai_url || '').trim() || 'http://localhost:11235';
+        extra = ' (' + cUrl + ')';
+      }
+      msg.textContent = 'Active: ' + label + extra;
+      msg.style.color = 'var(--fg)';
+    } catch (_) {}
+  }
+
+  provSel.addEventListener('change', function() { updateFetchVisibility(); saveFetch(); _syncFetchPicker(); });
+  if (urlInput) urlInput.addEventListener('change', saveFetch);
+  if (antiBotCb) antiBotCb.addEventListener('change', saveFetch);
+  if (timeoutInput) timeoutInput.addEventListener('change', saveFetch);
+
+  // ── Provider picker with logos ──
+  var picker = el('fetch-provider-picker');
+  var pickerBtn = el('fetch-provider-btn');
+  var pickerMenu = el('fetch-provider-menu');
+  var pickerCurrent = picker ? picker.querySelector('.adm-provider-current') : null;
+  function _fetchProviderLogoSvg(key) {
+    return _FETCH_PROVIDER_LOGOS[key] || '';
+  }
+  function _renderFetchPickerMenu() {
+    if (!pickerMenu) return;
+    pickerMenu.innerHTML = Array.from(provSel.options).map(function(o) {
+      var logo = _fetchProviderLogoSvg(o.dataset.fetchLogo);
+      var active = o.value === provSel.value ? ' active' : '';
+      var avail = _availableProviders[o.value] !== false;
+      var disabledClass = !avail ? ' disabled' : '';
+      return '<div class="adm-provider-item' + active + disabledClass + '" role="option" data-value="' + o.value.replace(/"/g, '&quot;') + '"' + (!avail ? ' aria-disabled="true"' : '') + '>' +
+        '<span class="adm-provider-logo">' + logo + '</span>' +
+        '<span>' + o.textContent + (!avail ? ' (unavailable)' : '') + '</span>' +
+      '</div>';
+    }).join('');
+  }
+  function _syncFetchPicker() {
+    if (!pickerCurrent) return;
+    var opt = provSel.selectedOptions[0] || provSel.options[0];
+    var logo = _fetchProviderLogoSvg(opt.dataset.fetchLogo);
+    pickerCurrent.querySelector('.adm-provider-logo').innerHTML = logo;
+    pickerCurrent.querySelector('.adm-provider-name').textContent = opt.textContent;
+  }
+  if (picker && pickerBtn && pickerMenu && pickerCurrent) {
+    _renderFetchPickerMenu();
+    _syncFetchPicker();
+    pickerBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      pickerMenu.classList.toggle('hidden');
+    });
+    pickerMenu.addEventListener('click', function(e) {
+      var item = e.target.closest('.adm-provider-item');
+      if (!item || item.classList.contains('disabled')) return;
+      provSel.value = item.dataset.value;
+      provSel.dispatchEvent(new Event('change', { bubbles: true }));
+      pickerMenu.classList.add('hidden');
+      _renderFetchPickerMenu();
+    });
+    document.addEventListener('click', function(e) {
+      if (!picker.contains(e.target)) pickerMenu.classList.add('hidden');
+    });
+  }
+
+  loadSettings();
+}
+
 function initAll() {
   modalEl = el('settings-modal');
   initTabs();
@@ -2162,6 +2316,7 @@ function initAll() {
   initTtsSettings();
   initSttSettings();
   initSearchSettings();
+  initFetchSettings();
   initResearchSettings();
   initResearchSearchSettings();
   initAgentSettings();

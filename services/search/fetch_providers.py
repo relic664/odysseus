@@ -1,0 +1,254 @@
+"""Fetch provider abstraction for webpage content extraction."""
+
+import asyncio
+import logging
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
+
+import httpx
+
+from .content import fetch_webpage_content
+
+logger = logging.getLogger(__name__)
+
+FETCH_PROVIDER_INFO = {
+    "simple": ("Simple (HTTP + BS4)", False, False),
+    "crawl4ai": ("Crawl4ai", False, True),
+}
+
+
+@dataclass
+class FetchResult:
+    """Standardized fetch result. Content is provider-agnostic text."""
+    url: str
+    title: str
+    content: str
+    success: bool
+    error: Optional[str] = None
+
+
+class FetchProvider(ABC):
+    """Interface for webpage fetch providers.
+
+    All providers are async. Providers that wrap sync libraries
+    use asyncio.to_thread() internally.
+    """
+
+    @abstractmethod
+    async def fetch(self, url: str, timeout: int = 15) -> FetchResult:
+        ...
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        ...
+
+
+class SimpleFetchProvider(FetchProvider):
+    """Built-in fetcher: HTTP + BeautifulSoup.
+
+    Wraps fetch_webpage_content() from services/search/content.py.
+    Keeps SSRF protection and HTML parsing. Uses asyncio.to_thread()
+    to avoid blocking the event loop. Extracts only title and content
+    from the result.
+    """
+
+    @property
+    def name(self) -> str:
+        return "simple"
+
+    async def fetch(self, url: str, timeout: int = 15) -> FetchResult:
+        try:
+            result = await asyncio.to_thread(fetch_webpage_content, url, timeout=timeout)
+            return FetchResult(
+                url=result.get("url", url),
+                title=result.get("title", ""),
+                content=result.get("content", ""),
+                success=result.get("success", False),
+                error=result.get("error") or None,
+            )
+        except Exception as e:
+            logger.error(f"SimpleFetchProvider failed for {url}: {e}")
+            return FetchResult(
+                url=url,
+                title="",
+                content="",
+                success=False,
+                error=str(e),
+            )
+
+
+class Crawl4aiFetchProvider(FetchProvider):
+    """Fetch provider using the Crawl4ai REST API (/crawl endpoint).
+
+    Returns clean markdown content. Handles JS-rendered pages,
+    dynamic content, and anti-bot protection. Connects to a
+    self-hosted crawl4ai instance (typically a Docker container).
+    No API key required.
+    """
+
+    DEFAULT_BASE_URL = "http://localhost:11235"
+
+    def __init__(
+        self,
+        base_url: str = DEFAULT_BASE_URL,
+        anti_bot: bool = True,
+        timeout: int = 30,
+        only_text: bool = False,
+    ):
+        self._base_url = base_url.rstrip("/")
+        self._anti_bot = anti_bot
+        self._timeout = timeout
+        self._only_text = only_text
+
+    @property
+    def name(self) -> str:
+        return "crawl4ai"
+
+    @classmethod
+    def create_from_settings(cls, settings: Dict[str, Any]) -> "Crawl4aiFetchProvider":
+        base_url = (settings.get("crawl4ai_url") or "").strip()
+        if not base_url:
+            base_url = cls.DEFAULT_BASE_URL
+        anti_bot = settings.get("crawl4ai_anti_bot", True)
+        timeout = int(settings.get("crawl4ai_timeout", 30))
+        only_text = settings.get("crawl4ai_only_text", False)
+        return cls(base_url=base_url, anti_bot=anti_bot, timeout=timeout, only_text=only_text)
+
+    @staticmethod
+    def _extract_markdown(result: Dict[str, Any]) -> str:
+        """Extract markdown from a /crawl result object.
+
+        The /crawl endpoint returns markdown as a nested object:
+        result["markdown"]["fit_markdown"] or result["markdown"]["raw_markdown"].
+        """
+        md = result.get("markdown")
+        if isinstance(md, dict):
+            for key in ("fit_markdown", "filtered_markdown", "markdown", "raw_markdown"):
+                value = md.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        return ""
+
+    @staticmethod
+    def _extract_title(result: Dict[str, Any]) -> str:
+        metadata = result.get("metadata")
+        if isinstance(metadata, dict):
+            title = metadata.get("title", "")
+            if title and isinstance(title, str):
+                return title.strip()
+        return ""
+
+    async def fetch(self, url: str, timeout: int = 15) -> FetchResult:
+        endpoint = f"{self._base_url}/crawl"
+        effective_timeout = timeout if timeout != 15 else self._timeout
+        anti_bot = self._anti_bot if timeout != 15 else self._anti_bot
+
+        payload = {
+            "urls": [url],
+            "browser_config": {
+                "headless": True,
+                "enable_stealth": anti_bot,
+            },
+            "crawler_config": {
+                "magic": anti_bot,
+                "simulate_user": anti_bot,
+                "cache_mode": "bypass",
+                "excluded_tags": ["nav", "footer", "header", "aside", "form"],
+                "remove_overlay_elements": True,
+                "remove_forms": True,
+            },
+        }
+
+        if self._only_text:
+            payload["crawler_config"]["markdown_generator"] = {
+                "type": "DefaultMarkdownGenerator",
+                "params": {
+                    "options": {
+                        "ignore_links": True,
+                        "ignore_images": True,
+                    }
+                },
+            }
+
+        try:
+            async with httpx.AsyncClient(timeout=effective_timeout) as client:
+                resp = await client.post(endpoint, json=payload)
+
+            if resp.status_code != 200:
+                body_preview = resp.text[:300] if resp.text else "(empty)"
+                return FetchResult(
+                    url=url,
+                    title="",
+                    content="",
+                    success=False,
+                    error=f"Crawl4ai returned HTTP {resp.status_code}: {body_preview}",
+                )
+
+            data = resp.json()
+
+            if isinstance(data, dict) and not data.get("success", True):
+                err = data.get("error_message") or data.get("error") or "Crawl4ai reported failure"
+                return FetchResult(
+                    url=url,
+                    title="",
+                    content="",
+                    success=False,
+                    error=f"Crawl4ai: {err}",
+                )
+
+            results = data.get("results", [])
+            if not results or not isinstance(results, list):
+                return FetchResult(
+                    url=url,
+                    title="",
+                    content="",
+                    success=False,
+                    error="Invalid response structure from Crawl4ai (missing results)",
+                )
+
+            result = results[0]
+
+            if not result.get("success", True):
+                err = result.get("error_message") or result.get("error") or "Crawl4ai reported failure"
+                return FetchResult(
+                    url=url,
+                    title="",
+                    content="",
+                    success=False,
+                    error=f"Crawl4ai: {err}",
+                )
+
+            return FetchResult(
+                url=url,
+                title=self._extract_title(result),
+                content=self._extract_markdown(result),
+                success=True,
+            )
+
+        except httpx.ConnectError:
+            return FetchResult(
+                url=url,
+                title="",
+                content="",
+                success=False,
+                error=f"Cannot connect to Crawl4ai at {self._base_url}. Is the container running?",
+            )
+        except httpx.TimeoutException:
+            return FetchResult(
+                url=url,
+                title="",
+                content="",
+                success=False,
+                error=f"Crawl4ai timed out after {effective_timeout}s",
+            )
+        except Exception as e:
+            logger.error(f"Crawl4aiFetchProvider failed for {url}: {e}")
+            return FetchResult(
+                url=url,
+                title="",
+                content="",
+                success=False,
+                error=str(e),
+            )
