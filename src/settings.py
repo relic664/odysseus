@@ -85,6 +85,7 @@ DEFAULT_SETTINGS = {
     "crawl4ai_url": "",
     "crawl4ai_anti_bot": True,
     "crawl4ai_timeout": 30,
+    "crawl4ai_only_text": False,
     "research_endpoint_id": "",
     "research_model": "",
     "research_search_provider": "",

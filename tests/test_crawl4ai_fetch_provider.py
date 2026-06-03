@@ -77,6 +77,7 @@ def test_create_from_settings_defaults():
     assert prov._base_url == "http://localhost:11235"
     assert prov._anti_bot is True
     assert prov._timeout == 30
+    assert prov._only_text is False
 
 
 def test_create_from_settings_custom_values():
@@ -84,10 +85,12 @@ def test_create_from_settings_custom_values():
         "crawl4ai_url": "http://custom:9999/",
         "crawl4ai_anti_bot": False,
         "crawl4ai_timeout": 45,
+        "crawl4ai_only_text": True,
     })
     assert prov._base_url == "http://custom:9999"
     assert prov._anti_bot is False
     assert prov._timeout == 45
+    assert prov._only_text is True
 
 
 def test_create_from_settings_whitespace_url():
@@ -162,6 +165,52 @@ async def test_fetch_anti_bot_disabled():
     assert payload["browser_config"]["enable_stealth"] is False
     assert payload["crawler_config"]["magic"] is False
     assert payload["crawler_config"]["simulate_user"] is False
+
+
+@pytest.mark.asyncio
+async def test_fetch_only_text_enabled():
+    prov = Crawl4aiFetchProvider(base_url="http://test.local", only_text=True)
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 200
+    fake_resp.json.return_value = {
+        "success": True,
+        "results": [{
+            "success": True,
+            "markdown": {"raw_markdown": "content"},
+        }],
+    }
+
+    fake_client = _make_fake_client(fake_resp)
+
+    with patch("services.search.fetch_providers.httpx.AsyncClient", return_value=fake_client):
+        await prov.fetch("https://example.com")
+
+    payload = fake_client.post_calls[0][1]["json"]
+    assert payload["crawler_config"]["only_text"] is True
+
+
+@pytest.mark.asyncio
+async def test_fetch_only_text_default_false():
+    prov = Crawl4aiFetchProvider(base_url="http://test.local")
+
+    fake_resp = MagicMock()
+    fake_resp.status_code = 200
+    fake_resp.json.return_value = {
+        "success": True,
+        "results": [{
+            "success": True,
+            "markdown": {"raw_markdown": "content"},
+        }],
+    }
+
+    fake_client = _make_fake_client(fake_resp)
+
+    with patch("services.search.fetch_providers.httpx.AsyncClient", return_value=fake_client):
+        await prov.fetch("https://example.com")
+
+    payload = fake_client.post_calls[0][1]["json"]
+    assert payload["crawler_config"]["only_text"] is False
 
 
 @pytest.mark.asyncio

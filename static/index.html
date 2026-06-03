@@ -1666,10 +1666,17 @@
                     <span style="font-size:11px;opacity:0.6;">Stealth + magic</span>
                   </label>
                 </div>
-                <div id="set-fetchTimeoutRow" class="settings-row" style="display:none;">
-                  <label class="settings-label">Timeout (s)</label>
-                  <input id="set-fetchTimeout" type="number" min="5" max="120" value="30" class="settings-select" style="width:80px;flex:none;">
-                </div>
+               <div id="set-fetchTimeoutRow" class="settings-row" style="display:none;">
+                   <label class="settings-label">Timeout (s)</label>
+                   <input id="set-fetchTimeout" type="number" min="5" max="120" value="30" class="settings-select" style="width:80px;flex:none;">
+                 </div>
+                 <div id="set-fetchOnlyTextRow" class="settings-row" style="display:none;">
+                   <label class="settings-label">Only text</label>
+                   <label style="flex:1;display:flex;align-items:center;justify-content:flex-end;gap:6px;margin:0;">
+                     <input type="checkbox" id="set-fetchOnlyText" style="width:16px;height:16px;accent-color:var(--accent);">
+                     <span style="font-size:11px;opacity:0.6;">Strip links & images</span>
+                   </label>
+                 </div>
                 <div id="set-fetchHint" class="admin-toggle-sub"></div>
                <div id="set-fetchMsg" style="font-size:11px;"></div>
             </div>

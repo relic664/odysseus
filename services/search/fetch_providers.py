@@ -95,10 +95,12 @@ class Crawl4aiFetchProvider(FetchProvider):
         base_url: str = DEFAULT_BASE_URL,
         anti_bot: bool = True,
         timeout: int = 30,
+        only_text: bool = False,
     ):
         self._base_url = base_url.rstrip("/")
         self._anti_bot = anti_bot
         self._timeout = timeout
+        self._only_text = only_text
 
     @property
     def name(self) -> str:
@@ -111,7 +113,8 @@ class Crawl4aiFetchProvider(FetchProvider):
             base_url = cls.DEFAULT_BASE_URL
         anti_bot = settings.get("crawl4ai_anti_bot", True)
         timeout = int(settings.get("crawl4ai_timeout", 30))
-        return cls(base_url=base_url, anti_bot=anti_bot, timeout=timeout)
+        only_text = settings.get("crawl4ai_only_text", False)
+        return cls(base_url=base_url, anti_bot=anti_bot, timeout=timeout, only_text=only_text)
 
     @staticmethod
     def _extract_markdown(result: Dict[str, Any]) -> str:
@@ -152,6 +155,7 @@ class Crawl4aiFetchProvider(FetchProvider):
                 "magic": anti_bot,
                 "simulate_user": anti_bot,
                 "cache_mode": "bypass",
+                "only_text": self._only_text,
             },
         }
 

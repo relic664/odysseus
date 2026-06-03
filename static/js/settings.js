@@ -2166,10 +2166,12 @@ async function initFetchSettings() {
   var provSel = el('set-fetchProvider');
   var urlInput = el('set-fetchUrl');
   var urlRow = el('set-fetchUrlRow');
-  var antiBotCb = el('set-fetchAntiBot');
-  var antiBotRow = el('set-fetchAntiBotRow');
-  var timeoutInput = el('set-fetchTimeout');
-  var timeoutRow = el('set-fetchTimeoutRow');
+ var antiBotCb = el('set-fetchAntiBot');
+   var antiBotRow = el('set-fetchAntiBotRow');
+   var timeoutInput = el('set-fetchTimeout');
+   var timeoutRow = el('set-fetchTimeoutRow');
+   var onlyTextCb = el('set-fetchOnlyText');
+   var onlyTextRow = el('set-fetchOnlyTextRow');
   var hint = el('set-fetchHint');
   var msg = el('set-fetchMsg');
   var _fetchSettings = {};
@@ -2181,8 +2183,9 @@ async function initFetchSettings() {
       _fetchSettings = await res.json();
       if (_fetchSettings.fetch_provider) provSel.value = _fetchSettings.fetch_provider;
       if (urlInput) urlInput.value = (_fetchSettings.crawl4ai_url || '').trim() || 'http://localhost:11235';
-      if (antiBotCb) antiBotCb.checked = _fetchSettings.crawl4ai_anti_bot !== false;
-      if (timeoutInput) timeoutInput.value = _fetchSettings.crawl4ai_timeout || 30;
+    if (antiBotCb) antiBotCb.checked = _fetchSettings.crawl4ai_anti_bot !== false;
+       if (timeoutInput) timeoutInput.value = _fetchSettings.crawl4ai_timeout || 30;
+       if (onlyTextCb) onlyTextCb.checked = !!_fetchSettings.crawl4ai_only_text;
     } catch (_) {}
     try {
       var provRes = await fetch('/api/search/fetch-providers', { credentials: 'same-origin' });
@@ -2200,6 +2203,7 @@ async function initFetchSettings() {
     if (urlRow) urlRow.style.display = isC4a ? 'flex' : 'none';
     if (antiBotRow) antiBotRow.style.display = isC4a ? 'flex' : 'none';
     if (timeoutRow) timeoutRow.style.display = isC4a ? 'flex' : 'none';
+    if (onlyTextRow) onlyTextRow.style.display = isC4a ? 'flex' : 'none';
     hint.textContent = _fetchProviderHints[prov] || '';
   }
 
@@ -2209,6 +2213,7 @@ async function initFetchSettings() {
       if (urlInput) payload.crawl4ai_url = urlInput.value.trim();
       if (antiBotCb) payload.crawl4ai_anti_bot = antiBotCb.checked;
       if (timeoutInput) payload.crawl4ai_timeout = parseInt(timeoutInput.value, 10) || 30;
+      if (onlyTextCb) payload.crawl4ai_only_text = onlyTextCb.checked;
       await fetch('/api/auth/settings', {
         method: 'POST',
         credentials: 'same-origin',
